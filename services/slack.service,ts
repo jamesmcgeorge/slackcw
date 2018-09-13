@@ -1,0 +1,141 @@
+let logger = require('./logger.service');
+import request = require('request');
+
+var ConnectWiseRest = require('connectwise-rest');
+
+var cw = new ConnectWiseRest({
+    companyId: 'XXX',
+    companyUrl: 'xxx.xxxx.xx',
+    publicKey: 'XXXXXXXXXXXXXXX',
+    privateKey: 'XXXXXXXXXXXXXX',
+    entryPoint: 'v4_6_release', // optional, defaults to 'v4_6_release' 
+    timeout: 20000,             // optional, request connection timeout in ms, defaults to 20000 
+    retry: false,               // optional, defaults to false 
+    retryOptions: {             // optional, override retry behavior, defaults as shown 
+        retries: 4,               // maximum number of retries 
+        minTimeout: 50,           // number of ms to wait between retries 
+        maxTimeout: 20000,        // maximum number of ms between retries 
+        randomize: true,          // randomize timeouts 
+    },
+    debug: true
+});
+
+
+export function ParseSlackCommand(command: string, text: string) {
+    switch (command) {
+        case "/ticket":
+            break;
+        case "/time":
+            return ParseTime(command, text);
+        case "/survey":
+
+        default:
+            return null;
+    }
+}
+
+function ParseTime(command: string, text: string): SlackCommand {
+    let textArray = text.split(" ");
+
+    if (textArray.length != 2) return null;
+
+    let slackCommand: SlackCommand = {
+        command: command,
+        text: textArray
+    }
+    return slackCommand;
+}
+
+function ParseTicket() {
+
+}
+
+export function GetCWTicketDetails(ticketID: number): Promise<any> {
+    console.log("Starting Promise to get CW Ticket: " + ticketID)
+    return new Promise(function (resolve, reject) {
+        console.log("Using connectwise-rest module")
+
+        let ticket;
+
+        cw.ServiceDeskAPI.Tickets.getTicketById(ticketID)
+            .then(function (result) {
+                console.log("CW API Ticket return result:")
+                //console.log(result);
+
+
+                ticket = FormatTicket(result);
+                cw.ServiceDeskAPI.ServiceNotes.getServiceNotes(ticketID, {pageSize:10})
+                    .then(function (result) {
+                        let returnObject = {
+                            response_type: "in_channel",
+                            text: "*Ticket Details #" + ticket.ticketID + "*",
+                            attachments: [{
+                                text: FormatNotes(result),
+                                title: ticket.title,
+                                title_link: ticket.title_link,
+                                mrkdwn_in: ["text"]
+                            }]
+                        }
+                        resolve(returnObject);
+                    })
+                    .catch(function (error) {
+                        logger.error("CW API Ticket return error", { error: error })
+                        console.log(error);
+                        reject(error);
+                    });
+            })
+            .catch(function (error) {
+                logger.error("CW API Ticket return error", {error: error})
+                console.log(error);
+                reject(error);
+            });
+    });
+}
+
+
+
+
+function FormatNotes(notes: Array<any>) {
+    logger.info("Parsing ticket notes", {notes0: notes[0]})
+    let returnText;
+    if (notes[0] === null || notes[0] === undefined) {
+        returnText = "No Initial Description";
+    } else {
+        let ticketCreator;
+        if (notes[0].member === null || notes[0].member === undefined) {
+            ticketCreator = notes[0].contact.name;
+        } else {
+            ticketCreator = notes[0].member.name;
+        }
+
+        returnText = "*Ticket Creator:* " + ticketCreator + "\n*Initial Note:* " + notes[0].text;
+    }
+    return returnText;
+}
+
+function FormatTicket(ticket: any) {
+    let returnObject = {
+        title: ticket.summary,
+        title_link: "https://xxx.xxxx.xx/v4_6_release/services/system_io/Service/fv_sr100_request.rails?service_recid=" + ticket.id + "&companyName=xxx",
+        ticketID: ticket.id
+    }
+    //let returnString = "ID: " + ticket.id + " -- Summary: " + ticket.summary + "\nCompany: " + ticket.company.name + " -- Contact: " + ticket.contactName;
+    return returnObject;
+}
+
+export function sendMessageToSlackResponseURL(responseURL, JSONmessage) {
+    var postOptions = {
+        uri: responseURL,
+        method: 'POST',
+        headers: {
+            'Content-type': 'application/json'
+        },
+        json: JSONmessage
+    }
+    logger.info("Sending the following message: ", { post: postOptions })
+    request(postOptions, (error, response, body) => {
+        if (error) {
+            // should do something here
+        }
+    })
+}
