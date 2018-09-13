@@ -7,7 +7,7 @@ import { GetCWTicketDetails, sendMessageToSlackResponseURL } from '../../../../s
 
 router.post('/', (req: express.Request, res: express.Response) => {
     let token = req.body.token;
-    if (token !== 'ixJqRDxBTHhes7gOpg7lWPkt') {
+    if (token !== 'XXXXXXXXXXXXXXX') {
         res.status(400).send("Invalid");
         return;
     }
